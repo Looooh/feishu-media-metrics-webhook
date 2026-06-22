@@ -121,6 +121,18 @@ def iter_records(limit: int | None) -> list[dict[str, Any]]:
 def extract_url(value: Any) -> str | None:
     if not value:
         return None
+    if isinstance(value, dict):
+        for key in ("link", "url", "text"):
+            url = extract_url(value.get(key))
+            if url:
+                return url
+        return None
+    if isinstance(value, list):
+        for item in value:
+            url = extract_url(item)
+            if url:
+                return url
+        return None
     if isinstance(value, str):
         urls = re.findall(r"https?://[^\s\])]+", value)
         for url in urls:
