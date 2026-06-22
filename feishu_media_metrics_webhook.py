@@ -19,6 +19,8 @@ import json
 import os
 import re
 import tempfile
+import threading
+import traceback
 from io import BytesIO
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
@@ -328,6 +330,15 @@ def handle_views(payload: dict[str, Any], overwrite: bool = False) -> dict[str, 
     }
 
 
+def run_views_background(payload: dict[str, Any], overwrite: bool) -> None:
+    try:
+        result = handle_views(payload, overwrite=overwrite)
+        print(f"views background result: {json.dumps(result, ensure_ascii=False)}")
+    except Exception:
+        print("views background failed:")
+        traceback.print_exc()
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "FeishuMediaMetricsWebhook/1.0"
 
@@ -353,7 +364,12 @@ class Handler(BaseHTTPRequestHandler):
             raw = self.rfile.read(length).decode("utf-8")
             payload = json.loads(raw) if raw else {}
             overwrite = bool(payload.get("overwrite"))
-            result = handle_views(payload, overwrite=overwrite) if self.path == "/views" else handle_metrics(payload, overwrite=overwrite)
+            if self.path == "/views" and not payload.get("sync"):
+                worker = threading.Thread(target=run_views_background, args=(dict(payload), overwrite), daemon=True)
+                worker.start()
+                result = {"ok": True, "accepted": True, "record_id": str(payload.get("record_id") or "").strip()}
+            else:
+                result = handle_views(payload, overwrite=overwrite) if self.path == "/views" else handle_metrics(payload, overwrite=overwrite)
             self.send_json(200, result)
         except Exception as exc:
             self.send_json(500, {"ok": False, "error": str(exc)})
