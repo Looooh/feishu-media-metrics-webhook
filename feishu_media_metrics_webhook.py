@@ -19,6 +19,7 @@ import json
 import os
 import re
 import tempfile
+from io import BytesIO
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 from urllib.parse import quote
@@ -237,7 +238,12 @@ def parse_view_count_from_ocr(items: list[dict[str, Any]], platform: Any = None)
 
 def extract_view_count_from_image(image: bytes, platform: Any = None) -> dict[str, Any]:
     with tempfile.NamedTemporaryFile(suffix=".png") as tmp:
-        tmp.write(image)
+        from PIL import Image
+
+        img = Image.open(BytesIO(image))
+        img = img.convert("RGB")
+        img.thumbnail((1600, 1600))
+        img.save(tmp, format="PNG", optimize=True)
         tmp.flush()
         result, _ = get_ocr_engine()(tmp.name)
 
