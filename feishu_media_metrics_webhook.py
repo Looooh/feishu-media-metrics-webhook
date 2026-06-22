@@ -42,7 +42,9 @@ from feishu_media_metrics_sync import (
 
 
 FEISHU_API_BASE = "https://open.feishu.cn/open-apis"
+FIELD_PLATFORM = "平台"
 FIELD_IDS = {
+    FIELD_PLATFORM: "fldXqRLJVJ",
     FIELD_LINK: "fld8Y9l8aH",
     FIELD_LIKE: "fld3piIvmU",
     FIELD_COMMENT: "fldYFfJ4bl",
@@ -162,7 +164,29 @@ def box_center(box: list[list[float]]) -> tuple[float, float]:
     return sum(xs) / len(xs), sum(ys) / len(ys)
 
 
-def parse_view_count_from_ocr(items: list[dict[str, Any]]) -> int | None:
+def platform_names(value: Any) -> set[str]:
+    if isinstance(value, list):
+        return {str(item) for item in value}
+    if value:
+        return {str(value)}
+    return set()
+
+
+def parse_view_count_from_ocr(items: list[dict[str, Any]], platform: Any = None) -> int | None:
+    if not items:
+        return None
+
+    platforms = platform_names(platform)
+    allow_xiaohongshu = not platforms or "小红书" in platforms
+    allow_douyin = not platforms or "抖音" in platforms
+    texts = [item["text"] for item in items]
+
+    for index, text in enumerate(texts):
+        if allow_xiaohongshu and "阅读" in text and index + 1 < len(texts):
+            number = text_number(texts[index + 1])
+            if number is not None:
+                return number
+
     for item in items:
         text = item["text"]
         x, y = item["center"]
@@ -172,16 +196,46 @@ def parse_view_count_from_ocr(items: list[dict[str, Any]]) -> int | None:
             if number is None:
                 continue
             ox, oy = other["center"]
-            if "阅读" in text and ox > x and abs(oy - y) < 28:
+            if allow_xiaohongshu and "阅读" in text and ox > x and abs(oy - y) < 28:
                 candidates.append((abs(oy - y) + abs(ox - x) / 10, number))
-            if "观看人数" in text and oy < y and abs(ox - x) < 45:
+            if allow_douyin and ("观看人数" in text or "观着人数" in text) and oy < y and abs(ox - x) < 45:
+                candidates.append((abs(oy - y) + abs(ox - x), number))
+            if allow_douyin and ("播放量" in text or "视频播放数" in text) and oy > y and abs(ox - x) < 70:
                 candidates.append((abs(oy - y) + abs(ox - x), number))
         if candidates:
             return sorted(candidates)[0][1]
+
+    for index, text in enumerate(texts):
+        if not allow_douyin:
+            continue
+        if "播放量" not in text and "视频播放数" not in text:
+            continue
+
+        header_row = [text]
+        for next_text in texts[index + 1 : index + 4]:
+            if not any(keyword in next_text for keyword in ["点赞", "评论", "收藏", "分享", "弹幕"]):
+                break
+            header_row.append(next_text)
+
+        if len(header_row) >= 2:
+            number_index = index + len(header_row)
+            if number_index < len(texts):
+                numbers = [text_number(value) for value in texts[number_index : number_index + len(header_row)]]
+                numbers = [number for number in numbers if number is not None]
+                if numbers:
+                    if "视频播放数" in text and len(numbers) >= 2 and numbers[1] > numbers[0] * 3:
+                        return numbers[1]
+                    return numbers[0]
+
+        if index + 1 < len(texts):
+            number = text_number(texts[index + 1])
+            if number is not None:
+                return number
+
     return None
 
 
-def extract_view_count_from_image(image: bytes) -> dict[str, Any]:
+def extract_view_count_from_image(image: bytes, platform: Any = None) -> dict[str, Any]:
     with tempfile.NamedTemporaryFile(suffix=".png") as tmp:
         tmp.write(image)
         tmp.flush()
@@ -192,7 +246,7 @@ def extract_view_count_from_image(image: bytes) -> dict[str, Any]:
         box, text = row[0], str(row[1])
         items.append({"text": text, "center": box_center(box)})
 
-    views = parse_view_count_from_ocr(items)
+    views = parse_view_count_from_ocr(items, platform=platform)
     return {"views": views, "ocr_text": [item["text"] for item in items]}
 
 
@@ -244,7 +298,7 @@ def handle_views(payload: dict[str, Any], overwrite: bool = False) -> dict[str, 
     last_result: dict[str, Any] | None = None
     for attachment in attachments:
         image = client.download_attachment(attachment["file_token"], attachment.get("extra_info"))
-        last_result = extract_view_count_from_image(image)
+        last_result = extract_view_count_from_image(image, platform=current.get(FIELD_PLATFORM))
         views = last_result.get("views")
         if views is not None:
             patch = {FIELD_VIEW: views}
