@@ -37,6 +37,14 @@ from feishu_media_metrics_sync import (
 
 
 FEISHU_API_BASE = "https://open.feishu.cn/open-apis"
+FIELD_IDS = {
+    FIELD_LINK: "fld8Y9l8aH",
+    FIELD_LIKE: "fld3piIvmU",
+    FIELD_COMMENT: "fldYFfJ4bl",
+    FIELD_FAVORITE: "flddGDniLg",
+    FIELD_VIEW: "fldFnqVdPk",
+}
+FIELD_NAMES_BY_ID = {field_id: name for name, field_id in FIELD_IDS.items()}
 
 
 class FeishuClient:
@@ -83,15 +91,20 @@ class FeishuClient:
             "GET",
             f"/bitable/v1/apps/{self.base_token}/tables/{self.table_id}/records/{record_id}",
         )
-        fields = data["data"]["record"].get("fields") or {}
+        raw_fields = data["data"]["record"].get("fields") or {}
+        fields = dict(raw_fields)
+        for field_id, field_name in FIELD_NAMES_BY_ID.items():
+            if field_id in raw_fields and field_name not in fields:
+                fields[field_name] = raw_fields[field_id]
         fields["record_id"] = record_id
         return fields
 
     def update_record(self, record_id: str, patch: dict[str, int]) -> None:
+        api_patch = {FIELD_IDS.get(field, field): value for field, value in patch.items()}
         self.request(
             "PUT",
             f"/bitable/v1/apps/{self.base_token}/tables/{self.table_id}/records/{record_id}",
-            json={"fields": patch},
+            json={"fields": api_patch},
         )
 
 
@@ -102,7 +115,8 @@ def handle_metrics(payload: dict[str, Any], overwrite: bool = False) -> dict[str
 
     client = FeishuClient()
     current = client.get_record(record_id)
-    video_url = str(payload.get("video_url") or "").strip() or extract_url(current.get(FIELD_LINK))
+    raw_video_url = payload.get("video_url") or current.get(FIELD_LINK)
+    video_url = extract_url(raw_video_url) or str(raw_video_url or "").strip()
     if not video_url:
         raise ValueError("video_url is required")
 

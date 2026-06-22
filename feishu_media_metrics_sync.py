@@ -122,12 +122,16 @@ def extract_url(value: Any) -> str | None:
     if not value:
         return None
     if isinstance(value, str):
+        urls = re.findall(r"https?://[^\s\])]+", value)
+        for url in urls:
+            host = urlparse(url).netloc.lower()
+            if any(domain in host for domain in ["xiaohongshu.com", "xhslink.com", "douyin.com", "bilibili.com", "b23.tv"]):
+                return url
+        if urls:
+            return urls[0]
         match = re.search(r"\((https?://[^)]+)\)", value)
         if match:
             return match.group(1)
-        match = re.search(r"https?://\S+", value)
-        if match:
-            return match.group(0).rstrip(")")
     return None
 
 
