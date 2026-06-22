@@ -376,7 +376,14 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == "/metrics" and not payload.get("sync"):
                 worker = threading.Thread(target=run_metrics_background, args=(dict(payload), overwrite), daemon=True)
                 worker.start()
-                result = {"ok": True, "accepted": True, "record_id": str(payload.get("record_id") or "").strip()}
+                result = {
+                    "ok": True,
+                    "accepted": True,
+                    "record_id": str(payload.get("record_id") or "").strip(),
+                    "source": "pending",
+                    "updated": {},
+                    "skipped_existing": {},
+                }
             elif self.path == "/views" and not payload.get("sync"):
                 worker = threading.Thread(target=run_views_background, args=(dict(payload), overwrite), daemon=True)
                 worker.start()
