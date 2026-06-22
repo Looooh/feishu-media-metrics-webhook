@@ -339,6 +339,15 @@ def run_views_background(payload: dict[str, Any], overwrite: bool) -> None:
         traceback.print_exc()
 
 
+def run_metrics_background(payload: dict[str, Any], overwrite: bool) -> None:
+    try:
+        result = handle_metrics(payload, overwrite=overwrite)
+        print(f"metrics background result: {json.dumps(result, ensure_ascii=False)}")
+    except Exception:
+        print("metrics background failed:")
+        traceback.print_exc()
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "FeishuMediaMetricsWebhook/1.0"
 
@@ -364,7 +373,11 @@ class Handler(BaseHTTPRequestHandler):
             raw = self.rfile.read(length).decode("utf-8")
             payload = json.loads(raw) if raw else {}
             overwrite = bool(payload.get("overwrite"))
-            if self.path == "/views" and not payload.get("sync"):
+            if self.path == "/metrics" and not payload.get("sync"):
+                worker = threading.Thread(target=run_metrics_background, args=(dict(payload), overwrite), daemon=True)
+                worker.start()
+                result = {"ok": True, "accepted": True, "record_id": str(payload.get("record_id") or "").strip()}
+            elif self.path == "/views" and not payload.get("sync"):
                 worker = threading.Thread(target=run_views_background, args=(dict(payload), overwrite), daemon=True)
                 worker.start()
                 result = {"ok": True, "accepted": True, "record_id": str(payload.get("record_id") or "").strip()}
