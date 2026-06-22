@@ -100,11 +100,10 @@ class FeishuClient:
         return fields
 
     def update_record(self, record_id: str, patch: dict[str, int]) -> None:
-        api_patch = {FIELD_IDS.get(field, field): value for field, value in patch.items()}
         self.request(
             "PUT",
             f"/bitable/v1/apps/{self.base_token}/tables/{self.table_id}/records/{record_id}",
-            json={"fields": api_patch},
+            json={"fields": patch},
         )
 
 
