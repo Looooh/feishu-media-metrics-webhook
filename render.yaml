@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: feishu-media-metrics-webhook
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python feishu_media_metrics_webhook.py --host 0.0.0.0
+    envVars:
+      - key: FEISHU_BASE_TOKEN
+        value: Sj0XbUehqasIgGsTB1JcVsbMn4e
+      - key: FEISHU_TABLE_ID
+        value: tblCYLbbNQLVQjcq
+      - key: FEISHU_APP_ID
+        sync: false
+      - key: FEISHU_APP_SECRET
+        sync: false
+      - key: WEBHOOK_TOKEN
+        generateValue: true
