@@ -258,6 +258,35 @@ def scrape_bilibili(url: str) -> Metrics:
 
 
 def scrape_douyin(url: str) -> Metrics:
+    aweme_match = re.search(r"/video/(\d+)", url)
+    if aweme_match:
+        api = "https://www.douyin.com/aweme/v1/web/aweme/detail/"
+        resp = requests.get(
+            api,
+            params={
+                "aweme_id": aweme_match.group(1),
+                "aid": "1128",
+                "device_platform": "webapp",
+            },
+            headers={"User-Agent": UA, "Referer": "https://www.douyin.com/"},
+            timeout=20,
+        )
+        try:
+            payload = resp.json()
+        except ValueError:
+            payload = {}
+        stat = (payload.get("aweme_detail") or {}).get("statistics") or {}
+        if stat:
+            views = to_int(stat.get("play_count"))
+            return Metrics(
+                likes=to_int(stat.get("digg_count")),
+                comments=to_int(stat.get("comment_count")),
+                favorites=to_int(stat.get("collect_count")),
+                views=None if views == 0 else views,
+                shares=to_int(stat.get("share_count")),
+                source="douyin",
+            )
+
     resp = get_mobile(url)
     text = resp.text
     views = find_json_number(text, ["play_count", "playCount"])
